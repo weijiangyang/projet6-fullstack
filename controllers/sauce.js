@@ -1,15 +1,18 @@
 const Sauce = require('../models/sauce');
 
 
+
 exports.createSauce = (req, res, next) => {
-    delete req.body._id;
+    const sauceObject = JSON.parse(req.body.sauce);
+    delete sauceObject._id;
     const sauce = new Sauce({
-        ...req.body
+      ...sauceObject,
+      imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
     });
     sauce.save()
-    .then(() => res.status(200).json({message:'Objet enregistre!'}))
-    .catch(error => res.status(400).json({error}));
-};
+      .then(() => res.status(201).json({ message: 'Objet enregistré !'}))
+      .catch(error => res.status(400).json({ error }));
+  };
 
 exports.getAllSauces = (req,res,next) => {
     Sauce.find()
@@ -24,15 +27,76 @@ exports.getOneSauce = (req,res,next) => {
     .catch(error => res.status(400).json({error}));
 };
 
-exports.modifierSauce = (req,res,next) => {
-    Sauce.updateOne({_id: req.params.id },{...req.body,_id:req.params.id })
-    .then(() => res.status(200).json({message:'Objet modifie!'}))
-    .catch(error => res.status(400).json({error}));
-};
+exports.modifierSauce = (req, res, next) => {
+    const sauceObject = req.file ?
+      {
+        ...JSON.parse(req.body.sauce),
+        imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
+      } : { ...req.body };
+    Sauce.updateOne({ _id: req.params.id }, { ...sauceObject, _id: req.params.id })
+      .then(() => res.status(200).json({ message: 'Objet modifié !'}))
+      .catch(error => res.status(400).json({ error }));
+  };
 
 exports.deleteSauce = (req,res,next) =>{
     Sauce.deleteOne({_id:req.params.id })
     .then(() => res.status(200).json({message:'Objet supprime!'}))
     .catch(error => res.status(400).json({error}))
 };
+
+exports.likeSauce = (req, res, next) => {
+    switch (req.body.like) {
+      //cancel = 0
+      //check if the user had liked or disliked the sauce
+      //uptade the sauce, send message/error
+      case 0:
+        Sauce.findOne({ _id: req.params.id })
+          .then((sauce) => {
+            if (sauce.usersLiked.find(user => user === req.body.userId)) {
+              Sauce.updateOne({ _id: req.params.id }, {
+                $inc: { likes: -1 },
+                $pull: { usersLiked: req.body.userId },
+                _id: req.params.id
+              })
+                .then(() => { res.status(201).json({ message: 'Ton avis a été pris en compte!' }); })
+                .catch((error) => { res.status(400).json({ error: error }); });
+  
+            } if (sauce.usersDisliked.find(user => user === req.body.userId)) {
+              Sauce.updateOne({ _id: req.params.id }, {
+                $inc: { dislikes: -1 },
+                $pull: { usersDisliked: req.body.userId },
+                _id: req.params.id
+              })
+                .then(() => { res.status(201).json({ message: 'Ton avis a été pris en compte!' }); })
+                .catch((error) => { res.status(400).json({ error: error }); });
+            }
+          })
+          .catch((error) => { res.status(404).json({ error: error }); });
+        break;
+      //likes = 1
+      //uptade the sauce, send message/error
+      case 1:
+        Sauce.updateOne({ _id: req.params.id }, {
+          $inc: { likes: 1 },
+          $push: { usersLiked: req.body.userId },
+          _id: req.params.id
+        })
+          .then(() => { res.status(201).json({ message: 'Ton like a été pris en compte!' }); })
+          .catch((error) => { res.status(400).json({ error: error }); });
+        break;
+      //likes = -1
+      //uptade the sauce, send message/error
+      case -1:
+        Sauce.updateOne({ _id: req.params.id }, {
+          $inc: { dislikes: 1 },
+          $push: { usersDisliked: req.body.userId },
+          _id: req.params.id
+        })
+          .then(() => { res.status(201).json({ message: 'Ton dislike a été pris en compte!' }); })
+          .catch((error) => { res.status(400).json({ error: error }); });
+        break;
+      default:
+        console.error('not today : mauvaise requête');
+    }
+  };
 
